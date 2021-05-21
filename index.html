@@ -1,0 +1,294 @@
+<html>
+
+<head>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
+</head>
+
+<body>
+<div class="alert alert-light" role="alert">
+	To compute what to declare for your coinbase transactions (in France), you can choose your file in the picker below, and everything should appear
+</div>
+
+<div class="alert alert-warning" role="alert">
+	Security notice: This page doesn't upload anything to the server, everything is processed locally in the page's javascript (check the source code). If you are still concerned about security, turn off you wifi/internet connection and pick the file, the results will still appear.
+</div>
+
+<main>
+
+<h4>Select your coinbase CSV report below:</h4>
+<input type="file" id="file-selector" accept=".csv">
+
+<p/>
+
+<div id="income">
+	<h2>Taxable income from crypto-currencies (France)</h2>
+      <div class="table-responsive" id="incomeContent">
+      </div>
+	  </div>
+    </main>
+
+<script>
+	class Transaction {
+		constructor(time, crypto, type, quantity, spot, subTotal, fee) {
+			this.time = time;
+			this.crypto = crypto;
+			this.type = type;
+			this.quantity = quantity;
+			this.spot = spot;
+			this.subTotal = subTotal;
+			this.fee = fee;
+		}
+	}
+	
+	class TaxedTransaction {
+		constructor(time, crypto, plusValue, soldAmount, previousAmount, fee) {
+			this.time = time;
+			this.crypto = crypto;
+			this.plusValue = plusValue;
+			this.soldAmount = soldAmount;
+			this.previousAmount = previousAmount;
+			this.fee = fee;
+		}
+	}
+	
+	function analyzeCoinbaseCSV(coinbaseCSV) {
+		
+		var lines = coinbaseCSV.split('\n');
+		
+		if(lines.length <= 0) {
+			//DISPLAY ERROR
+			console.log("Empty CSV file.");
+			return;
+		}
+		
+		let lineNumber = 0;
+		
+		while(lineNumber < lines.length && !lines[lineNumber].includes("Quantity Transacted")) {
+			lineNumber ++;
+		}
+		
+		if(lineNumber >= lines.length) {
+			console.log("Invalid CSV. No transaction header found.");
+			return;
+		}
+		
+		// Here we read the header
+
+		let timeIndex = 0;
+		let cryptoIndex = 0;
+		let typeIndex = 0;
+		let quantityIndex = 0;
+		let spotIndex = 0;
+		let subTotalIndex = 0;
+		let feeIndex = 0;
+		
+		let headers = lines[lineNumber].split(",");
+		for(let headerIdx = 0; headerIdx < headers.length; headerIdx++) {
+
+			if(headers[headerIdx] == "Timestamp") {
+				timeIndex = headerIdx;
+			}
+			if(headers[headerIdx] == "Transaction Type") {
+				typeIndex = headerIdx;
+			}
+			if(headers[headerIdx] == "Asset") {
+				cryptoIndex = headerIdx;
+			}
+			if(headers[headerIdx] == "Quantity Transacted") {
+				quantityIndex = headerIdx;
+			}
+			if(headers[headerIdx] == "EUR Spot Price at Transaction") {
+				spotIndex = headerIdx;
+			}
+			if(headers[headerIdx] == "EUR Subtotal") {
+				subTotalIndex = headerIdx;
+			}
+			if(headers[headerIdx] == "EUR Fees") {
+				feeIndex = headerIdx;
+			}
+		}
+		console.log(timeIndex + " " + cryptoIndex + " " + typeIndex +" " +quantityIndex + " " + spotIndex +" " + subTotalIndex +" " + feeIndex);
+		
+		lineNumber ++
+		let cryptoSet = new Set();
+		let transactions = [];
+		while(lineNumber < lines.length) {
+		console.log("line: " +lines[lineNumber] )
+		
+			if(lines[lineNumber] === "") {
+				break;
+			}
+			
+			let values = lines[lineNumber].split(",");
+			
+			//Start with the transactions
+			let transaction = new Transaction(
+												new Date(values[timeIndex]), 
+												values[cryptoIndex],
+												values[typeIndex],
+												parseFloat(values[quantityIndex]),
+												parseFloat(values[spotIndex]),
+												parseFloat(values[subTotalIndex]),
+												parseFloat(values[feeIndex])
+											);
+													
+			transactions.push(transaction);
+			cryptoSet.add(transaction.crypto);
+			
+			console.log(transaction.time + " " + transaction.crypto + " " + transaction.type+ " " + transaction.quantity+ " " + transaction.spot+ " " + transaction.subTotal+ " " + transaction.fee);
+			lineNumber ++;
+		}
+
+
+		console.log("Your crypto-currencies are: ");
+		cryptoSet.forEach(function(value) {
+			console.log(value)
+		});
+		
+		const incomeMainElement = document.getElementById('income');
+		incomeMainElement.style.visibility = "visible";
+  
+		//Compute +values for each of the crypto-currencies
+		cryptoSet.forEach(function(cryptoCurrency) {
+			
+			let taxedTransactions = [];
+			
+			filteredTransactions = transactions.filter(transaction => transaction.crypto == cryptoCurrency);
+			filteredTransactions.sort(function(a, b){return a-b} );
+			
+			console.log("Transactions:");
+			transactions.forEach(function(a) {
+				console.log(a.time +" " + a.crypto);
+			});
+			
+			let quantityHeld = 0.;
+			let boughtAmounts = [];
+			let sellTransactions = [];
+			
+			for(let filteredTransaction of filteredTransactions) {
+				if(filteredTransaction.type == "Buy"){
+					boughtAmounts.push(filteredTransaction.subTotal);
+					quantityHeld += filteredTransaction.quantity;
+				} else if (filteredTransaction.type == "Sell") {
+					
+					//Compute the sell transaction
+					let ptfValue = quantityHeld * filteredTransaction.spot;
+					let percentageSold = filteredTransaction.subTotal / ptfValue;
+					
+					let discountedTotalAmount = 0.;
+					for(let i = 0; i < boughtAmounts.length; i++) {
+						let discountedAmount = boughtAmounts[i] * percentageSold;
+						
+						discountedTotalAmount += discountedAmount;
+						boughtAmounts[i] -= discountedAmount;
+					}
+					
+					let plusValue = filteredTransaction.subTotal - discountedTotalAmount;
+					console.log("Computed sell transaction plus-value: " + plusValue);
+					
+					taxedTransactions.push(new TaxedTransaction(
+																	filteredTransaction.time,
+																	cryptoCurrency,
+																	plusValue,
+																	filteredTransaction.subTotal,
+																	discountedTotalAmount,
+																	filteredTransaction.fee
+																)
+											);
+					
+					quantityHeld -= filteredTransaction.quantity;
+				}
+				
+			}
+			
+			//Display the crypto-currencies taxable income
+			const incomeElement = document.getElementById('incomeContent');
+			let headerElement = document.createElement('h3');
+			
+			let tableElement = document.createElement('table');
+			tableElement.classList.add("table");
+			tableElement.classList.add("table-striped");
+			tableElement.classList.add("table-sm");
+			
+			let tableHeadElement = document.createElement('thead');
+			let tableHeadTRElement = document.createElement('tr');
+			
+			let tableHeadTHElement1 = document.createElement('th');
+			let tableHeadTHElement2 = document.createElement('th');
+			let tableHeadTHElement3 = document.createElement('th');
+			let tableHeadTHElement4 = document.createElement('th');
+			let tableHeadTHElement5 = document.createElement('th');
+			let tableHeadTHElement6 = document.createElement('th');
+			
+			tableHeadTHElement1.textContent = "Sell transaction date";
+			tableHeadTHElement2.textContent = "Crypto-currency";
+			tableHeadTHElement3.textContent = "Acquisition value";
+			tableHeadTHElement4.textContent = "Sell value";
+			tableHeadTHElement5.textContent = "Plus-value (without the fee)";
+			tableHeadTHElement6.textContent = "Fee";
+			
+			tableHeadTRElement.appendChild(tableHeadTHElement1);
+			tableHeadTRElement.appendChild(tableHeadTHElement2);
+			tableHeadTRElement.appendChild(tableHeadTHElement3);
+			tableHeadTRElement.appendChild(tableHeadTHElement4);
+			tableHeadTRElement.appendChild(tableHeadTHElement5);
+			tableHeadTRElement.appendChild(tableHeadTHElement6);
+			
+			let tableBodyElement = document.createElement('tbody');
+			for(let taxedTransaction of taxedTransactions) {
+			
+				let tableBodyTRElement = document.createElement('tr');
+			
+				let tableBodyTDElement1 = document.createElement('td');
+				let tableBodyTDElement2 = document.createElement('td');
+				let tableBodyTDElement3 = document.createElement('td');
+				let tableBodyTDElement4 = document.createElement('td');
+				let tableBodyTDElement5 = document.createElement('td');
+				let tableBodyTDElement6 = document.createElement('td');
+				
+				tableBodyTDElement1.textContent = taxedTransaction.time;
+				tableBodyTDElement2.textContent = taxedTransaction.crypto;
+				tableBodyTDElement3.textContent = taxedTransaction.previousAmount;
+				tableBodyTDElement4.textContent = taxedTransaction.soldAmount;
+				tableBodyTDElement5.textContent = taxedTransaction.plusValue;
+				tableBodyTDElement6.textContent = taxedTransaction.fee;
+				
+				tableBodyTRElement.appendChild(tableBodyTDElement1);
+				tableBodyTRElement.appendChild(tableBodyTDElement2);
+				tableBodyTRElement.appendChild(tableBodyTDElement3);
+				tableBodyTRElement.appendChild(tableBodyTDElement4);
+				tableBodyTRElement.appendChild(tableBodyTDElement5);
+				tableBodyTRElement.appendChild(tableBodyTDElement6);
+				
+				tableBodyElement.appendChild(tableBodyTRElement);
+			}
+			
+			tableHeadElement.appendChild(tableHeadTRElement);
+			tableElement.appendChild(tableHeadElement);
+			tableElement.appendChild(tableBodyElement);
+			
+			headerElement.textContent = cryptoCurrency;
+			
+			incomeElement.appendChild(headerElement);
+			incomeElement.appendChild(tableElement);
+		});
+		
+	}
+
+  const incomeMainElement = document.getElementById('income');
+  incomeMainElement.style.visibility = "hidden";
+  
+  const fileSelector = document.getElementById('file-selector');
+  fileSelector.addEventListener('change', (event) => {
+	var file = event.target.files[0];
+	var reader = new FileReader();
+	reader.onload = function(e) {
+		//Read file and output results
+		analyzeCoinbaseCSV(e.target.result);
+	};
+
+	reader.readAsText(file);
+  });
+</script>
+</body>
+</html>
