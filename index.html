@@ -6,11 +6,19 @@
 
 <body>
 <div class="alert alert-light" role="alert">
-	To compute what to declare for your coinbase transactions (in France), you can choose your file in the picker below, and everything should appear
+	<h5> This page will help you declare your Coinbase transactions to your local tax authority (France) 🇫🇷 </h5>
+	Any feedback is appreciated (Contact me on my reddit account https://www.reddit.com/user/lil-lil-lil-lil-lil)
 </div>
 
 <div class="alert alert-warning" role="alert">
 	Security notice: This page doesn't upload anything to the server, everything is processed locally in the page's javascript (check the source code). If you are still concerned about security, turn off you wifi/internet connection and pick the file, the results will still appear.
+</div>
+
+<div class="alert alert-light" role="alert">
+	<h4>How to:</h4>
+	1- Log in to your coinbase account<br/>
+	2- Download your report for all assets, transactions, years, etc.<br/>
+	3- Pick this report in the file selector below<br/>
 </div>
 
 <main>
@@ -52,6 +60,10 @@
 	}
 	
 	function analyzeCoinbaseCSV(coinbaseCSV) {
+		
+		//Clear previous report
+		const incomeElement = document.getElementById('incomeContent');
+		incomeElement.textContent = '';
 		
 		var lines = coinbaseCSV.split('\n');
 		
@@ -202,7 +214,7 @@
 			}
 			
 			//Display the crypto-currencies taxable income
-			const incomeElement = document.getElementById('incomeContent');
+			
 			let headerElement = document.createElement('h3');
 			
 			let tableElement = document.createElement('table');
